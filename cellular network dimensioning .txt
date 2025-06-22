@@ -1,0 +1,91 @@
+import math
+
+def erlang_b(A, N):
+    invB = 1.0
+    for k in range(1, N + 1):
+        invB = 1.0 + (k / A) * invB #summation part of the formula
+    return 1.0 / invB #inverse the invB to get the actual B
+
+def inverse_erlang_b(N, B_target, tol=1e-5):
+    low = 0.00001
+    high = 1000
+    mid = (low + high) / 2
+
+    while high - low > tol:
+        B = erlang_b(mid, N)
+        if B > B_target: #B is too high
+            high = mid #decrease the high
+        else:
+            low = mid #increase the low since B is too low
+        mid = (low + high) / 2
+
+    return mid
+
+
+def minN(length, width, userDensity, minC2I, userErlang, trunkBW, totalBW, blocking_probability):
+
+    # Calculate area in square kilometers from meters
+    area_km2 = (length * width) / 1e6
+
+    # Calculate total number of users based on user density and area
+    total_users = userDensity * area_km2
+
+    # Calculate total offered traffic in Erlangs
+    total_traffic = total_users * userErlang
+
+    # Calculate total number of traffic channels that can be supported with the total bandwidth
+    channels = totalBW // trunkBW
+
+    # Predefined list of valid cluster sizes (reuse factors)
+    valid_N_values = [3, 4, 7, 9, 12, 13, 19, 21, 28]
+
+    # Dictionary mapping sectoring angle to co-channel reuse factor "n"
+    sectoring_angles_n = {60: 1, 120: 2, 180: 3}
+
+    # Initialize very high value for minimum number of cells (will be minimized later)
+    min_num_cells = 10000000
+
+    # Placeholder for best sectoring angle
+    best_sectoring = None
+
+    # Loop through each sectoring configuration (60°, 120°, 180°)
+    for sector_angle, n in sectoring_angles_n.items():
+        
+        # Calculate number of sectors per cell (360° divided by sector angle) rounded //
+        sectors_per_cell = 360 // sector_angle
+
+        # Estimate the required reuse factor based on co-channel interference requirement
+        new_N = (n * minC2I) / 3
+
+        # Find the smallest valid N value that meets or exceeds new_N
+        N = next((val for val in valid_N_values if val >= new_N), None)
+
+        # Calculate number of channels available per cell based on reuse factor
+        channels_per_cell = channels // N
+
+        # Calculate number of channels available per sector
+        channels_per_sector = channels_per_cell // sectors_per_cell
+
+        # Calculate traffic each sector can support under given blocking probability
+        traffic_per_sector = inverse_erlang_b(channels_per_sector, blocking_probability)
+
+        # Total traffic that can be handled per cell (across all sectors)
+        traffic_per_cell = traffic_per_sector * sectors_per_cell
+
+        # Calculate how many cells are needed to handle the total traffic
+        cells = math.ceil(total_traffic / traffic_per_cell)
+
+        # If this configuration uses fewer cells, store it as the best option
+        if cells < min_num_cells:
+            min_num_cells = cells          # Update the minimum cell count
+            best_sectoring = sector_angle  # Update the best sectoring angle
+
+    # Return the minimum number of cells needed and the best sectoring angle found
+    return min_num_cells, best_sectoring
+
+
+test_case_1 = minN(5000, 5000, 1000, 10, 0.0069, 200, 20000, 0.02)
+test_case_2 = minN(10000, 5000, 1000, 2.167, 0.0069, 200, 20000, 0.02)
+print(test_case_1)
+print(test_case_2)
+print(inverse_erlang_b(18, 0.02))
